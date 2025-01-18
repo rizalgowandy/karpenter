@@ -1,6 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -eu -o pipefail
+K8S_VERSION="${K8S_VERSION:="1.29.x"}"
+KUBEBUILDER_ASSETS="/usr/local/kubebuilder/bin"
 
 main() {
     tools
@@ -8,9 +10,21 @@ main() {
 }
 
 tools() {
-    cd tools
-    go mod tidy
-    GO111MODULE=on cat tools.go | grep _ | awk -F'"' '{print $2}' | xargs -tI % go install %
+    go install github.com/google/go-licenses@latest
+    go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+    go install github.com/google/ko@latest
+    go install github.com/mikefarah/yq/v4@latest
+    go install github.com/norwoodj/helm-docs/cmd/helm-docs@latest
+    go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+    go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
+    go install github.com/sigstore/cosign/v2/cmd/cosign@latest
+    go install -tags extended github.com/gohugoio/hugo@v0.110.0
+    go install golang.org/x/vuln/cmd/govulncheck@latest
+    go install github.com/onsi/ginkgo/v2/ginkgo@latest
+    go install github.com/rhysd/actionlint/cmd/actionlint@latest
+    go install github.com/mattn/goveralls@latest
+    go install github.com/google/go-containerregistry/cmd/crane@latest
+    go install oras.land/oras/cmd/oras@latest
 
     if ! echo "$PATH" | grep -q "${GOPATH:-undefined}/bin\|$HOME/go/bin"; then
         echo "Go workspace's \"bin\" directory is not in PATH. Run 'export PATH=\"\$PATH:\${GOPATH:-\$HOME/go}/bin\"'."
@@ -18,16 +32,20 @@ tools() {
 }
 
 kubebuilder() {
-    KUBEBUILDER_ASSETS="/usr/local/kubebuilder"
-    sudo rm -rf $KUBEBUILDER_ASSETS
-    sudo mkdir -p $KUBEBUILDER_ASSETS
+    sudo mkdir -p ${KUBEBUILDER_ASSETS}
+    sudo chown "${USER}" ${KUBEBUILDER_ASSETS}
     arch=$(go env GOARCH)
-    ## Kubebuilder does not support darwin/arm64, so use amd64 through Rosetta instead
-    if [[ $(go env GOOS) == "darwin" ]] && [[ $(go env GOARCH) == "arm64" ]]; then
-        arch="amd64"
-    fi
-    sudo mv "$(setup-envtest use -p path 1.21.x --arch=${arch})" $KUBEBUILDER_ASSETS/bin
+    ln -sf "$(setup-envtest use -p path "${K8S_VERSION}" --arch="${arch}" --bin-dir="${KUBEBUILDER_ASSETS}")"/* ${KUBEBUILDER_ASSETS}
     find $KUBEBUILDER_ASSETS
+
+    # Install latest binaries for 1.25.x (contains CEL fix)
+    if [[ "${K8S_VERSION}" = "1.25.x" ]] && [[ "$OSTYPE" == "linux"* ]]; then
+        for binary in 'kube-apiserver' 'kubectl'; do
+            rm $KUBEBUILDER_ASSETS/$binary
+            wget -P $KUBEBUILDER_ASSETS dl.k8s.io/v1.25.16/bin/linux/${arch}/${binary}
+            chmod +x $KUBEBUILDER_ASSETS/$binary
+        done
+    fi
 }
 
 main "$@"

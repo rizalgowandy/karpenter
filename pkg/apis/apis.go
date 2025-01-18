@@ -16,21 +16,25 @@ limitations under the License.
 package apis
 
 import (
-	"github.com/aws/karpenter/pkg/apis/provisioning/v1alpha5"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"knative.dev/pkg/webhook/resourcesemantics"
+	_ "embed"
+
+	"github.com/awslabs/operatorpkg/object"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
+//go:generate controller-gen crd object:headerFile="../../hack/boilerplate.go.txt" paths="./..." output:crd:artifacts:config=crds
 var (
-	// Builder includes all types within the apis package
-	Builder = runtime.NewSchemeBuilder(
-		v1alpha5.SchemeBuilder.AddToScheme,
-	)
-	// AddToScheme may be used to add all resources defined in the project to a Scheme
-	AddToScheme = Builder.AddToScheme
-	// Resources defined in the project
-	Resources = map[schema.GroupVersionKind]resourcesemantics.GenericCRD{
-		v1alpha5.SchemeGroupVersion.WithKind("Provisioner"): &v1alpha5.Provisioner{},
+	Group              = "karpenter.k8s.aws"
+	CompatibilityGroup = "compatibility." + Group
+	//go:embed crds/karpenter.k8s.aws_ec2nodeclasses.yaml
+	EC2NodeClassCRD []byte
+	//go:embed crds/karpenter.sh_nodepools.yaml
+	NodePoolCRD []byte
+	//go:embed crds/karpenter.sh_nodeclaims.yaml
+	NodeClaimCRD []byte
+	CRDs         = []*apiextensionsv1.CustomResourceDefinition{
+		object.Unmarshal[apiextensionsv1.CustomResourceDefinition](EC2NodeClassCRD),
+		object.Unmarshal[apiextensionsv1.CustomResourceDefinition](NodeClaimCRD),
+		object.Unmarshal[apiextensionsv1.CustomResourceDefinition](NodePoolCRD),
 	}
 )
